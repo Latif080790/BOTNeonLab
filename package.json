@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --test tests/market.test.mts",
+    "test:integration": "node --test tests/market-db.test.mts",
+    "test:routes": "node --test tests/market-routes.test.mts",
+    "worker:market": "node scripts/market-worker.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

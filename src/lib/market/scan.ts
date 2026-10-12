@@ -1,7 +1,7 @@
 import {
   evaluateMarketQuality,
   type MarketQualityResult,
-} from "./quality";
+} from "./quality.ts";
 
 export type ScanOutcome = "PASS" | "EXCLUDE" | "NEEDS_DATA";
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { normalizeDexIdentity } from "./identity";
-import { evaluateMarketQuality, type MarketQualityStatus } from "./quality";
+import { normalizeDexIdentity } from "./identity.ts";
+import { evaluateMarketQuality, type MarketQualityStatus } from "./quality.ts";
 
 const DexPairSchema = z.object({
   chainId: z.string().trim().min(1).max(64),
@@ -25,7 +25,7 @@ const DexPairSchema = z.object({
 }).passthrough();
 
 const DexSearchResponseSchema = z.object({
-  pairs: z.array(DexPairSchema).max(500).nullable().optional(),
+  pairs: z.array(DexPairSchema).max(500).nullable(),
 }).passthrough();
 
 export class DexProviderSchemaError extends Error {

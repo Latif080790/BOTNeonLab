@@ -9,6 +9,10 @@ Prototype NEON LAB menggunakan Next.js, Supabase Auth, dan PostgreSQL Row Level 
    `supabase/migrations/20261012194000_data_pipeline.sql`
    `supabase/migrations/20261012195000_market_discovery.sql`
    `supabase/migrations/20261012202000_market_universes.sql`
+   `supabase/migrations/20261013010000_market_crawler.sql`
+   `supabase/migrations/20261013011000_market_crawler_hardening.sql`
+   `supabase/migrations/20261013012000_market_quota_observability.sql`
+   `supabase/migrations/20261013012001_reconcile_discovery_schema.sql`
    Migrasi discovery aman dijalankan ulang jika enum `public.discovery_coverage` sudah ada dengan label yang sesuai; label yang berbeda akan menghentikan migrasi agar skema tidak tertimpa.
 2. Pada proyek hosted, tambahkan URL callback deployment ke Authentication → URL Configuration → Redirect URLs, misalnya `https://<domain>/auth/callback`. URL localhost pengembangan sudah terdaftar di `supabase/config.toml`.
 3. Buat variabel environment lokal:
@@ -45,14 +49,16 @@ Tanpa URL dan publishable/anon key yang valid, seluruh rute workspace tertutup d
 - `GET /api/market/search?q=<query>` melakukan pencarian publik DEX Screener hanya untuk sesi terautentikasi dengan role `owner`, `researcher`, atau `operator`. Endpoint provider dikunci di server; input tidak dapat menentukan URL tujuan.
 - `GET /api/market/discoveries?limit=50&cursor=<opaque>` membaca observasi discovery tersimpan secara keyset-paginated dalam workspace pengguna. Cursor terikat ke workspace dan urutan tetap memakai `observed_at` serta ID; hasil tetap hanya bukti discovery, bukan feed harga eksekusi.
 - `GET /api/market/universes?limit=50&cursor=<opaque>` menampilkan revisi universe terbaru per nama dengan cursor keyset terikat workspace. `POST /api/market/universes` membuat revisi immutable baru; pemohon wajib memiliki role owner, researcher, atau operator dan menyertakan provider terdaftar, cakupan venue/chain, referensi lisensi, batas kandidat, serta status.
-- Registry universe mencatat cakupan dan batas halaman, tetapi bukan allowlist trading. Route crawler/provider belum mengonsumsi universe tersebut; jangan menganggap keberadaan revisi `active` sebagai izin trading atau klaim coverage.
+- Registry universe mencatat cakupan dan batas kandidat, tetapi bukan allowlist trading. `POST /api/market/crawls` mengikat universe revision dan seed query; worker memfilter hasil sesuai scope. Revisi `active` bukan izin trading atau klaim coverage lengkap.
 - Kuota API dibedakan per endpoint berdasarkan [dokumentasi DEX Screener](https://docs.dexscreener.com/api/reference.md) dan dicadangkan atomik dalam rolling window PostgreSQL bersama antar-instance. Hanya GET idempoten yang dicoba ulang, maksimal tiga attempt dan dalam deadline terbatas; kegagalan tetap dikembalikan eksplisit.
 - Identitas DEX menggunakan chain, mint, dan pool tanpa mengubah kapitalisasi alamat; identitas CEX memuat venue, market type, base, quote, dan symbol. Instrumen bersimbol sama tidak digabung lintas identitas.
 - Hasil search dicap `PARTIAL` dan `tradingEligible: false`. DEX Screener tidak menyediakan waktu event atau sequence pada endpoint pencarian; waktu respons tidak menggantikan waktu pasar. Quality gate karena itu menandai hasil `needs_data`, sehingga hasil discovery ini tidak layak menjadi quote eksekusi atau input keputusan trading.
 - Run pencarian dan kandidat disimpan append-only secara atomik melalui RPC yang memvalidasi actor, workspace, role, schema dan hash; query asli tidak disimpan, hanya hash SHA-256. Baca data discovery tunduk pada membership RLS dan FK komposit menjaga kandidat tetap dalam workspace run induk.
-- Migrasi menyiapkan `market_events` append-only dan `provider_states`. Penulisan keduanya disediakan hanya bagi collector tepercaya dengan service role; API web tidak menyimpan atau memalsukan event pasar lewat publishable key. Durable market ingestion belum diaktifkan sampai worker tepercaya dan kebijakan penyimpanan provider dibangun.
+- Worker terpisah menulis observasi discovery ke `market_events`, memperbarui `provider_states` dan menyimpan outbox secara atomik melalui RPC khusus service role. Data tanpa event time/sequence tetap `needs_data`; ini belum menjadi feed eksekusi. Worker memerlukan environment server-only dan harus dijalankan agar antrean diproses.
 - Evaluator SCAN deterministik mensyaratkan policy berversi, seluruh metrik yang diperlukan, snapshot segar, sequence terurut tanpa gap dan dua source lineage independen. Snapshot hilang/stale menghasilkan `NEEDS_DATA`; threshold belum ditetapkan di endpoint ini, sehingga tidak ada policy trading default.
-- Endpoint `/latest/dex/search` saat ini merupakan vertical slice discovery, bukan crawler penuh: belum ada universe/cursor, adapter CEX, pemilihan pool canonical/watchlist, API scan yang memakai policy tersimpan, atau feed quote/order-book eksekusi.
+- Endpoint `/latest/dex/search` tetap discovery parsial. Jalur crawler sudah memakai universe, run/attempt durable, recovery lease dan quota bersama; cursor provider tetap tidak tersedia. Adapter CEX, pemilihan pool canonical/watchlist, API scan memakai policy tersimpan dan feed quote/order-book eksekusi belum termasuk jalur ini.
+
+Panduan API, worker, batas kontrak dan pengujian: [E03 crawler](docs/e03-crawler.md).
 
 ## Pengujian
 

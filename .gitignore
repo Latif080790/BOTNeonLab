@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local schema comparison evidence (no application data)
+/supabase/*-inventory-e03.json
+/supabase/hosted-schema-before-e03.sql
+/.local/
+/supabase/local-start-e03.log
