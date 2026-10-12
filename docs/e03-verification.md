@@ -1,6 +1,6 @@
 # E03 — laporan implementasi dan verifikasi
 
-Sesi: 12 Oktober 2026. Status keseluruhan: **IN_PROGRESS — migration history dan schema hosted sudah direkonsiliasi; verifikasi end-to-end hosted dan konfigurasi worker masih menunggu**.
+Sesi: 12 Oktober 2026. Status keseluruhan: **PASS — satu crawl hosted terotorisasi selesai; worker berkelanjutan belum dikonfigurasi**.
 
 ## Hasil implementasi
 
@@ -23,15 +23,20 @@ Sesi: 12 Oktober 2026. Status keseluruhan: **IN_PROGRESS — migration history d
 | SQL transaksional (`supabase/tests/market_crawler.sql`) | PASS: percobaan ketiga berhasil, crash/reclaim, worker lama ditolak, rollback seluruh hasil bila item kedua invalid, quota bersama, Retry-After, perubahan universe, pencabutan role dan RLS; fixture di-rollback |
 | Provider nyata (`scripts/check-dex-provider.mts`) | Satu pencarian read-only berhasil; 27 observasi, seluruh quality needs_data; tidak menulis database atau mengirim order |
 | SQL lint lokal | Tidak ditemukan kesalahan schema/function |
-| TypeScript, ESLint, build produksi | PASS |
+| TypeScript | PASS setelah penambahan workspaceId; ESLint sebelumnya PASS, tetapi validasi ulang terhambat oleh dependency tree tidak lengkap (`@eslint-community/eslint-utils` hilang) dan `npm ci` mendeteksi lockfile tidak sinkron; build produksi sebelumnya PASS |
 | Whitespace diff | PASS |
 | Hosted migration history | PASS: delapan versi, `20261012190000` sampai `20261013012001`, tercatat setelah repair migration history yang sebelumnya kosong |
 | Hosted schema inventory | PASS: 573 entri dibandingkan dengan database lokal hasil migrasi; tidak ada entri missing, extra atau berbeda |
-| Hosted crawl state saat pemeriksaan | 0 run, 0 discovery run, 0 universe, dan 0 crawl aktif |
-| Hosted authenticated crawl end-to-end | **NOT RUN** — belum ada sesi/uji universe hosted yang disiapkan; tidak membuat data, pengguna atau kriteria scope dengan asumsi |
+| Hosted state setelah uji | 1 crawl run terminal, 0 discovery run, 1 universe uji dan 0 crawl aktif |
+| Provider no-op preflight | PASS: query unik read-only menghasilkan 0 observasi; tidak ada database write |
+| Route authenticated pada build saat ini | PASS: aplikasi E03 terisolasi memakai sesi hosted; GET universe 200, POST universe 201, GET sesudahnya mengonfirmasi satu revisi sesuai scope. Respons daftar universe kini menyertakan `workspaceId` sesi |
+| Aplikasi lama pada `127.0.0.1:3000` | GET `/api/market/universes` menjawab 404; proses `next start` yang sudah berjalan belum menyajikan route E03. Tidak dihentikan atau ditimpa |
+| Universe uji hosted | PASS: tepat satu `TEST_ONLY`, ID `20d60e0f-f3a5-478d-bab8-ca2de9992026`, provider `dexscreener`, chain `solana`, tanpa venue filter, referensi API terms resmi, maksimal 2 kandidat, status `active`, revision 1 |
+| Hosted authenticated crawl end-to-end | PASS: run `f6753523-4762-4656-9e5e-da5451cac93d` berstatus `succeeded`, coverage `partial`, 0 observasi, `tradingEligible: false`; seed no-op unik, tanpa order/transaksi |
+| Worker test | Proses worker diverifikasi aktif sebelum enqueue, lalu dihentikan setelah crawl selesai; worker berkelanjutan belum dipasang |
 | Hosted security advisors | WARN: SECURITY DEFINER RPC yang memang memerlukan otorisasi server/database dan proteksi password bocor Auth yang masih nonaktif |
 
-Pengujian HTTP memakai provider fixture; pengujian provider nyata dilakukan terpisah. Kombinasi keduanya belum merupakan bukti pengoperasian worker hosted. Data fixture berada di database lokal terisolasi; credentials dan `.env.local` hosted tidak diubah. Output 27 observasi adalah hasil satu smoke check, bukan jaminan jumlah hasil provider berikutnya.
+Pengujian HTTP memakai provider fixture; pengujian provider nyata dilakukan terpisah. Data fixture berada di database lokal terisolasi; credentials dan `.env.local` hosted tidak diubah. Output 27 observasi adalah hasil satu smoke check, bukan jaminan jumlah hasil provider berikutnya. Preflight no-op dan crawl hosted menghasilkan 0 observasi. Crawl bukan transaksi dry-run: catatan run/attempt/outbox tetap tersimpan. Universe dan run uji merupakan data audit hosted yang dipertahankan, bukan fixture rollback.
 
 ## Temuan yang diperbaiki selama pengujian
 
@@ -42,7 +47,7 @@ Pengujian HTTP memakai provider fixture; pengujian provider nyata dilakukan terp
 
 ## Keadaan hosted yang benar-benar teramati
 
-Proyek pada konfigurasi aplikasi adalah BOTNeonLab, ref `zgjgkdwsolldzvhifjhh`. Awalnya history migration hosted kosong walau objek schema sudah dipasang manual. Inventory dibandingkan dengan migrasi lokal; function fingerprint mencocokkan versi dasar yang sudah ada dan menunjukkan hardening/observability/reconciliation sebagai selisih yang belum terpasang. Hosted memiliki 0 run, discovery run, universe dan crawl aktif saat diperiksa.
+Proyek pada konfigurasi aplikasi adalah BOTNeonLab, ref `zgjgkdwsolldzvhifjhh`. Awalnya history migration hosted kosong walau objek schema sudah dipasang manual. Inventory dibandingkan dengan migrasi lokal; function fingerprint mencocokkan versi dasar yang sudah ada dan menunjukkan hardening/observability/reconciliation sebagai selisih yang belum terpasang. Sebelum uji terotorisasi dimulai, hosted memiliki 0 run, discovery run, universe dan crawl aktif.
 
 Lima migration yang schema-nya telah terbukti cocok ditandai applied tanpa mengulang DDL: `20261012190000`, `20261012194000`, `20261012195000`, `20261012202000`, dan `20261013010000`. Setelah itu `supabase db push --linked` berhasil menerapkan tiga migration tertunda: `20261013011000`, `20261013012000`, dan `20261013012001`. Query read-only sesudah penerapan mengonfirmasi delapan versi tercatat. Inventory hosted sesudahnya identik dengan inventory fresh local (573 entri); tidak ada migration reset atau perubahan data hosted yang diminta.
 
@@ -50,10 +55,9 @@ CLI `migration list` kemudian gagal memakai login role database karena autentika
 
 ## Pekerjaan yang masih diperlukan untuk menutup E03
 
-1. Verifikasi hosted authenticated route/RLS dan satu crawl fixture yang diotorisasi, dengan universe, seed dan penanganan data uji yang disetujui pemilik workspace; sampai itu dilakukan, jangan anggap worker hosted aktif.
-2. Konfigurasikan worker dengan `SUPABASE_URL` dan `SUPABASE_SERVICE_ROLE_KEY` melalui environment server/secret manager. Jangan menaruh key privileged di variabel `NEXT_PUBLIC_*` atau mengirimkannya lewat chat.
-3. Tinjau warning security advisor: SECURITY DEFINER RPC memiliki grant authenticated yang disengaja dan pemeriksaan role internal; leaked-password protection Auth perlu dipertimbangkan untuk diaktifkan.
-4. Catat reviewer/pemilik hasil, sepakati batas scope E03 search-discovery, lalu lanjutkan E04 untuk SCAN lengkap, VET dan watchlist.
+1. Untuk pemrosesan berkelanjutan, pasang worker sebagai layanan dengan `SUPABASE_URL` dan `SUPABASE_SERVICE_ROLE_KEY` yang sudah dirotasi melalui environment server/secret manager; jangan menaruh key privileged di variabel `NEXT_PUBLIC_*` atau mengirimkannya lewat chat.
+2. Tinjau warning security advisor: SECURITY DEFINER RPC memiliki grant authenticated yang disengaja dan pemeriksaan role internal; leaked-password protection Auth perlu dipertimbangkan untuk diaktifkan.
+3. Catat reviewer/pemilik hasil, sepakati batas scope E03 search-discovery, lalu lanjutkan E04 untuk SCAN lengkap, VET dan watchlist.
 
 Capability pagination/enumerasi DEX Screener search tetap tidak diklaim. Kontrak `discovery-observation-v1` adalah kontrak internal E03 terbatas, bukan klaim seluruh B01 2.0/PRD telah diimplementasikan. Perubahan major kontrak bot bersama dan feed trading memerlukan pekerjaan/validasi tersendiri.
 

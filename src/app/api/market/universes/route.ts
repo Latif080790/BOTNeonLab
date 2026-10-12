@@ -152,6 +152,7 @@ export async function GET(request: NextRequest) {
   const lastUniverse = universes.at(-1);
 
   return json({
+    workspaceId: context.workspaceId,
     universes,
     pagination: {
       limit,

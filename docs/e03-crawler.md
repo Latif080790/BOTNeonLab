@@ -32,6 +32,8 @@ Jika migrasi pernah dijalankan melalui SQL Editor, bandingkan schema, function, 
 }
 ```
 
+Workspace ID yang diperlukan pada body dapat dibaca dari properti `workspaceId` pada respons `GET /api/market/universes`; nilainya selalu milik workspace pertama yang diotorisasi untuk sesi aktif.
+
 Universe harus hanya memuat provider `dexscreener`, memiliki license reference dan minimal batas chain atau venue. Jika kedua batas terisi, kandidat harus memenuhi keduanya. Pemilihan chain/venue merupakan filter hasil, bukan jaminan endpoint provider membatasi pencarian pada scope tersebut.
 
 Respons 202 memuat runId dan statusUrl; klien melakukan `GET /api/market/crawls/{runId}` untuk status dan observasi. RLS menolak pembacaan lintas workspace. Maksimal 500 observasi; tidak ada pagination provider. UUID/hash adalah identitas, bukan bukti kelengkapan pasar.

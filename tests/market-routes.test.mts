@@ -25,6 +25,9 @@ test("authenticated HTTP enqueue/read, cross-origin rejection, worker and durabl
   assert.equal((await user.auth.signInWithPassword({ email, password })).error, null);
   const membership = await user.from("memberships").select("workspace_id").single();
   assert.equal(membership.error, null);
+  const universeList = await fetch(`${appUrl}/api/market/universes?limit=100`, { headers: { Cookie: [...jar].map(([k, v]) => `${k}=${v}`).join("; ") }, signal: AbortSignal.timeout(30000) });
+  assert.equal(universeList.status, 200, await universeList.clone().text());
+  assert.equal((await universeList.json()).workspaceId, membership.data!.workspace_id);
   const universe = await user.rpc("create_market_universe_revision", { target_name: `Route ${randomUUID()}`, target_provider_ids: ["dexscreener"], target_allowed_venues: [],
     target_allowed_chains: ["solana"], target_license_refs: ["TEST_ONLY:route-fixture"], target_max_candidates: 2, target_status: "active" });
   assert.equal(universe.error, null);
